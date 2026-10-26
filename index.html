@@ -1,0 +1,1105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title></title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f2f4f7;
+    --panel: #ffffff;
+    --ink: #1d2733;
+    --muted: #5d6b7c;
+    --line: #dfe4ea;
+    --accent: #34557a;
+    --accent-soft: #e6edf5;
+    --good: #1e7f55;  --good-bg: #e6f4ed;
+    --warn: #a86a12;  --warn-bg: #fbf1df;
+    --bad:  #b8322f;  --bad-bg:  #fbe9e8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px; -webkit-font-smoothing: antialiased;
+  }
+  .app { height: 100vh; display: flex; flex-direction: column; }
+  .muted { color: var(--muted); }
+
+  /* Banner + header with step bar */
+  header {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px;
+    padding: 8px 20px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .steps { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .steps .sep { width: 16px; height: 2px; background: var(--line); }
+  .step-btn {
+    display: flex; align-items: center; gap: 8px; padding: 4px 13px 4px 4px; border-radius: 999px;
+    border: 1px solid var(--line); background: #fff; color: var(--muted); white-space: nowrap;
+    font: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer; transition: background-color .3s, color .3s, border-color .3s;
+  }
+  .step-btn .num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #e3e8ef; color: var(--muted); font-size: 13px; transition: background-color .3s, color .3s; }
+  .step-btn.done .num { background: #c9d7e6; color: var(--accent); }
+  .step-btn.on { background: var(--accent-soft); border-color: #c4d3e4; color: var(--ink); }
+  .step-btn.on .num { background: var(--accent); color: #fff; }
+  .nav { display: flex; gap: 8px; justify-self: end; }
+  .nav button { font: inherit; font-size: 14px; font-weight: 600; border-radius: 8px; padding: 7px 14px; cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--ink); white-space: nowrap; }
+  .nav button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .nav button:disabled { opacity: .4; cursor: default; }
+
+  /* Steps */
+  .stage { flex: 1; min-height: 0; }
+  .step { display: none; height: 100%; padding: 12px 20px; flex-direction: column; gap: 10px; position: relative; }
+  .step.active { display: flex; animation: stepIn .45s ease both; }
+  @keyframes stepIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .lead { font-size: 17px; font-weight: 600; margin: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border-radius: 999px; padding: 3px 9px; white-space: nowrap; transition: background-color .6s ease, color .6s ease; }
+  .pill.bad  { background: var(--bad-bg);  color: var(--bad); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.good { background: var(--good-bg); color: var(--good); }
+  .pill.neutral { background: #eef1f4; color: var(--muted); }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+
+  /* Step 1 – raw list view */
+  .listhead { display: flex; align-items: baseline; gap: 16px; }
+  .listhead .count { margin-left: auto; font-size: 14px; color: var(--muted); }
+  .table-wrap { flex: 1; min-height: 0; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  .list { font-size: 12.5px; }
+  .list th {
+    position: sticky; top: 0; z-index: 2; background: #f5f6f8; text-align: left; font-weight: 600; color: var(--ink);
+    padding: 6px 6px; border-bottom: 1px solid var(--line); border-right: 1px solid #eceff3; cursor: pointer; user-select: none; line-height: 1.2; vertical-align: bottom;
+  }
+  .list th .arr { color: var(--muted); font-size: 11px; margin-left: 2px; }
+  .list tr.filters th { top: var(--head-h, 44px); padding: 4px 4px; cursor: default; background: #fafbfc; }
+  .list tr.filters input { width: 100%; min-width: 0; font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--ink); }
+  .list td { padding: 5px 6px; border-bottom: 1px solid #eef1f4; white-space: nowrap; max-width: 165px; overflow: hidden; text-overflow: ellipsis; }
+  .list td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .list tbody tr { cursor: pointer; }
+  .list tbody tr:hover td { background: #f6f8fb; }
+  .list tbody tr.sel td { background: var(--accent-soft); }
+  .list td.link { color: #2b5c95; }
+  .detail {
+    position: absolute; top: 12px; right: 20px; bottom: 12px; width: 400px; z-index: 5;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: -8px 0 24px rgba(20,40,70,.12);
+    display: flex; flex-direction: column; transform: translateX(110%); opacity: 0; transition: transform .3s ease, opacity .3s ease; pointer-events: none;
+  }
+  .detail.open { transform: none; opacity: 1; pointer-events: auto; }
+  .detail .dh { display: flex; align-items: start; gap: 10px; padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+  .detail .dh h3 { margin: 0; font-size: 18px; }
+  .detail .close { margin-left: auto; border: 1px solid var(--line); background: #fff; border-radius: 6px; font-size: 16px; width: 30px; height: 30px; cursor: pointer; color: var(--muted); }
+  .detail .db { padding: 12px 16px; overflow-y: auto; }
+  .detail dl { display: grid; grid-template-columns: 140px 1fr; gap: 5px 10px; margin: 0 0 14px; font-size: 14px; }
+  .detail dt { color: var(--muted); }
+  .detail dd { margin: 0; }
+  .detail h4 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .rels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+  .rels li { padding: 6px 10px; background: #f7f8fa; border: 1px solid var(--line); border-radius: 6px; }
+  .rels li b { font-weight: 600; }
+  .chain { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.5; }
+  .chain li { padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 6px 6px 0; }
+  .chain .v { color: var(--muted); }
+  .chain .self { font-weight: 700; }
+  .chain .svc { color: var(--accent); font-weight: 700; }
+  .detail .more { font-size: 13px; margin: -8px 0 14px; }
+
+  /* Steps 2–4: centred, content-sized boxes with room around them */
+  .step.roomy { justify-content: center; align-items: center; gap: 22px; padding: 20px 40px; }
+  .step.roomy > * { width: 100%; max-width: 1060px; }
+
+  /* Step 2 – analysis (one takeaway + one visual per panel) */
+  .s2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+  .apanel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 26px 18px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .apanel .op { font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+  .apanel .op span { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11.5px; margin-right: 6px; }
+  .apanel .take { font-size: 16px; font-weight: 600; margin: 6px 0 12px; line-height: 1.35; }
+  .apanel .body { display: flex; flex-direction: column; }
+  .crow { display: grid; grid-template-columns: 190px 1fr 40px; align-items: center; gap: 14px; font-size: 13.5px; padding: 3px 0; }
+  .crow b { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .track { height: 10px; border-radius: 5px; background: #eef1f4; overflow: hidden; position: relative; }
+  .fill { height: 100%; width: 0; border-radius: 5px; background: #9fb0c3; transition: width .9s cubic-bezier(.2,.7,.2,1); }
+  .fill.warn { background: var(--warn); }
+  .fill.bad { background: var(--bad); }
+  .fill.good { background: var(--good); }
+  .pivot { border-collapse: separate; border-spacing: 4px; font-size: 13.5px; table-layout: fixed; }
+  .pivot th { font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 0 4px 2px; text-align: center; }
+  .pivot tbody th { text-align: left; color: var(--ink); font-size: 14px; font-weight: 500; white-space: nowrap; width: 100px; }
+  .pivot td { text-align: center; padding: 4px 4px; border-radius: 6px; background: rgba(184, 50, 47, var(--a, 0)); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .pivot td.hot { color: #fff; }
+  .pivot td.max { box-shadow: 0 0 0 2px var(--bad); }
+  .apanel .note { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  .pivot td.empty { color: #b9c1cb; background: #f7f8fa; font-weight: 400; }
+  .atable { font-size: 14px; }
+  .atable th { text-align: right; font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 0 10px 8px; border-bottom: 1px solid var(--line); }
+  .atable th:first-child, .atable td:first-child { text-align: left; padding-left: 0; }
+  .atable td { text-align: right; padding: 6px 10px; border-bottom: 1px solid #f0f2f5; font-variant-numeric: tabular-nums; }
+  .atable tr:last-child td { border-bottom: 0; }
+  .atable td.hi { color: var(--bad); font-weight: 700; }
+  .atable th { line-height: 1.2; vertical-align: bottom; }
+  .atable td:first-child { white-space: nowrap; }
+  .causes { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 9px; font-size: 14px; line-height: 1.35; }
+  .causes li { padding-left: 12px; border-left: 3px solid var(--bad); }
+  .causes b { display: block; font-weight: 600; }
+  .causes span { color: var(--muted); font-size: 13.5px; }
+  .causes.row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; }
+  .causes.row li { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--bad); border-radius: 10px; padding: 10px 14px; }
+  .apanel.wide { grid-column: 1 / -1; }
+
+  /* Step 3 – improvement plan */
+  .planhead { display: flex; align-items: baseline; gap: 14px; }
+  .planhead .sub { font-size: 15px; }
+  .plan { display: flex; flex-direction: column; gap: 12px; }
+  .prow {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    display: grid; grid-template-columns: 250px 170px minmax(0, 1fr) 170px; gap: 28px; align-items: center; padding: 12px 24px;
+  }
+  .pk .pl { font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .pk .pv { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .pv .from { color: var(--bad); }
+  .pv .from.warn { color: var(--warn); }
+  .pv .arrow { color: var(--muted); font-weight: 400; font-size: 20px; margin: 0 6px; }
+  .pv .to { color: var(--good); }
+  .pbar .track { height: 12px; overflow: visible; }
+  .pbar .fill { border-radius: 6px; }
+  .pbar .tgt { position: absolute; top: -6px; bottom: -6px; width: 3px; margin-left: -1px; background: var(--good); border-radius: 2px; }
+  .pa .act { font-size: 14.5px; line-height: 1.35; }
+  .po { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; color: var(--muted); }
+  .po b { font-size: 14.5px; color: var(--ink); font-weight: 600; }
+
+  /* Step 4 – outcome */
+  .headline { font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+  .compare { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .ocard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; min-height: 0; min-width: 0; }
+  .ocard .label { font-size: 14px; font-weight: 600; min-height: 36px; line-height: 1.3; }
+  .ocard .change { display: flex; align-items: baseline; gap: 6px; font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .ocard .change .from { color: var(--bad); }
+  .ocard .change .from.warn { color: var(--warn); }
+  .ocard .change .to { color: var(--good); }
+  .ocard .change .to.bad { color: var(--bad); }
+  .ocard .change .arrow { color: var(--muted); font-size: 20px; font-weight: 400; }
+  .ocard .odelta { font-size: 13px; color: var(--muted); }
+  .ocard .pill { align-self: flex-start; margin-top: 4px; }
+  .inits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .init { background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--warn); border-radius: 12px; padding: 12px 16px; }
+  .init.good { border-left-color: var(--good); }
+  .init .top { display: flex; align-items: center; gap: 8px; }
+  .init .name { font-size: 16px; font-weight: 700; }
+  .init .top .pill { margin-left: auto; }
+  .init .why { font-size: 14px; color: var(--muted); line-height: 1.4; margin-top: 4px; }
+  .init .unblock { font-size: 14px; margin-top: 8px; line-height: 1.4; }
+  .init .unblock b { color: var(--good); }
+
+  @media (max-width: 1000px) {
+    .app { height: auto; display: block; }
+    header { grid-template-columns: 1fr; padding: 10px 16px; }
+    .steps { justify-content: flex-start; flex-wrap: wrap; }
+    .steps .sep { display: none; }
+    .step { height: auto; padding: 12px 16px; }
+    .table-wrap { max-height: 70vh; }
+    .detail { position: fixed; top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 70vh; }
+    .s2 { grid-template-columns: 1fr; }
+    .apanel { overflow-x: auto; }
+    .crow { grid-template-columns: 140px 1fr 40px; }
+    .prow { grid-template-columns: 1fr; gap: 10px; padding: 14px 16px; }
+    .causes.row { grid-template-columns: 1fr 1fr; }
+    .compare { grid-template-columns: 1fr 1fr; }
+    .step.roomy { padding: 14px 16px; }
+    .inits { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) { .compare { grid-template-columns: 1fr; } }
+</style>
+
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div></div>
+    <nav class="steps" id="steps" aria-label="Steps"></nav>
+    <div class="nav">
+      <button type="button" id="back">← Back</button>
+      <button type="button" id="next" class="primary">Next →</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <!-- Step 1: raw data -->
+    <section class="step" data-step="1">
+      <div class="listhead">
+        <span class="count" id="rowCount"></span>
+      </div>
+      <div class="table-wrap" id="tableWrap">
+        <table class="list">
+          <thead id="listHead"></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <aside class="detail" id="detail" aria-live="polite">
+        <div class="dh"><div><div class="sub" id="dId"></div><h3 id="dName"></h3></div><button class="close" id="dClose" type="button" aria-label="Close">×</button></div>
+        <div class="db" id="dBody"></div>
+      </aside>
+    </section>
+
+    <!-- Step 2: analysis of the Month 1 records -->
+    <section class="step roomy" data-step="2">
+      <div class="s2">
+        <section class="apanel">
+          <div class="op"><span>1</span>Completeness per field</div>
+          <p class="take" id="take1"></p>
+          <div class="body" id="completeness"></div>
+        </section>
+        <section class="apanel">
+          <div class="op"><span>2</span>Unowned CIs by site and class</div>
+          <p class="take" id="take2"></p>
+          <div class="body"><table class="pivot" id="pivot"></table><div class="note" id="note2"></div></div>
+        </section>
+        <section class="apanel wide">
+          <div class="op"><span>3</span>Data quality by class</div>
+          <p class="take" id="take3"></p>
+          <div class="body"><table class="atable" id="byClass"></table><div class="note">Stale = not seen in 90 days · Orphan = no relationships · Past EOS = no replacement plan</div></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Step 3: improvement plan -->
+    <section class="step roomy" data-step="3">
+      <section>
+        <h2>Root causes</h2>
+        <ul class="causes row">
+          <li><b>No accountable owners</b><span>Nothing assigns an owner when a CI is created.</span></li>
+          <li><b>Data imported from several sources at once, without matching rules</b><span>The same asset ends up in the CMDB more than once.</span></li>
+          <li><b>Imports never mapped to services</b><span>Records arrive without relationships, so nothing links them to a business service.</span></li>
+          <li><b>No review routine</b><span>Stale records and end-of-support dates go unchecked.</span></li>
+        </ul>
+      </section>
+      <div class="planhead">
+        <p class="headline" id="planLead"></p>
+        <span class="sub">Targets and actions that address the root causes.</span>
+      </div>
+      <div class="plan" id="plan"></div>
+    </section>
+
+    <!-- Step 4: outcome -->
+    <section class="step roomy" data-step="4">
+      <div>
+        <p class="headline" id="headline"></p>
+        <div class="sub" id="subline" style="font-size:14.5px;margin-top:2px"></div>
+      </div>
+      <div class="compare" id="compare"></div>
+      <section>
+        <h2>What this unlocks</h2>
+        <div class="inits" id="outInits"></div>
+      </section>
+    </section>
+  </div>
+</div>
+
+<script id="model">
+/* ---------- Data model: fictional CMDB, seeded so every run is identical ---------- */
+
+const SITES = ["Factory A", "Factory B", "Data Center", "HQ", "Sales Hub"];
+const SITE_CODE = { "Factory A": "FA", "Factory B": "FB", "Data Center": "DC", "HQ": "HQ", "Sales Hub": "SH" };
+// Spellings found in the OT asset list and spreadsheets
+const SITE_SPELLINGS = { "Factory A": ["Fac A", "FactoryA"], "Factory B": ["Fac B", "Fac. B"], "Data Center": ["DC", "Datacenter"], "HQ": ["Head office"], "Sales Hub": ["Sales hub"] };
+const CLASSES = ["server", "application", "network", "OT system"];
+const CLASS_NAME = { server: "Server", application: "Application", network: "Network gear", "OT system": "OT system" };
+const CLASS_LABEL = { server: "servers", application: "applications", network: "network gear", "OT system": "OT systems" };
+const MONTHS = [
+  { n: 1, label: "Jan 2026", ref: "2026-01-31", title: "Baseline" },
+  { n: 2, label: "Feb 2026", ref: "2026-02-28", title: "Ownership rules" },
+  { n: 3, label: "Mar 2026", ref: "2026-03-31", title: "Identification rules" },
+  { n: 4, label: "Apr 2026", ref: "2026-04-30", title: "Lifecycle + site check" },
+  { n: 5, label: "May 2026", ref: "2026-05-31", title: "OT service mapping" },
+  { n: 6, label: "Jun 2026", ref: "2026-06-30", title: "Monthly DQ review" },
+];
+const BASE_REF = MONTHS[0].ref;
+const SRC = { NET: "Network discovery", OT: "OT import", SHEET: "Spreadsheet", OTD: "OT discovery" };
+const OWNER_RULE_MAX_AGE = 365;   // month 2 rule skips records not seen for longer than this (days)
+
+const PEOPLE = ["Anna Berg", "Erik Lund", "Maria Holm", "Johan Ek", "Sofia Nyberg", "Lars Dahl",
+  "Emma Strand", "Oskar Viklund", "Karin Sjöberg", "Nils Ahlgren", "Ida Forsman", "Peter Lindqvist"];
+const GENERAL_SERVICES = ["Order to cash", "Payroll & HR", "Customer portal", "Warehouse & logistics",
+  "Finance reporting", "Engineering & PLM", "Workplace IT", "Sales operations"];
+const APP_SERVICE = {
+  "SAP ERP": "Order to cash", "CRM": "Order to cash", "EDI Gateway": "Order to cash", "Price Configurator": "Order to cash", "Supplier Portal": "Order to cash",
+  "Payroll": "Payroll & HR", "HR Self-Service": "Payroll & HR", "Time Reporting": "Payroll & HR",
+  "E-commerce Portal": "Customer portal", "Warehouse Mgmt": "Warehouse & logistics", "Fleet Tracker": "Warehouse & logistics", "Label Printing": "Warehouse & logistics",
+  "BI Reporting": "Finance reporting", "Expense Claims": "Finance reporting",
+  "PLM": "Engineering & PLM", "Lab Information": "Engineering & PLM", "Document Archive": "Engineering & PLM",
+  "Intranet": "Workplace IT", "Service Desk": "Workplace IT", "Training Portal": "Workplace IT",
+  "MES Line Control": "Production planning", "Maintenance Planner": "Production planning", "Toolroom Scheduler": "Production planning",
+  "Quality Mgmt": "Production planning", "Energy Monitor": "Production planning",
+};
+const isFactory = (c) => c.site === "Factory A" || c.site === "Factory B";
+// OT software that runs on a server (SCADA, HMI, vision, AGV control); PLCs, CNCs etc. are devices on the network
+const isHostedOt = (c) => c.class === "OT system" && /scada|hmi|vis|agv/i.test(c.name);
+// The business service an application supports, found from its name ("PAYROLL_TEST" → Payroll → Payroll & HR)
+function appService(c) {
+  const flat = (x) => x.toLowerCase().replace(/[^a-z]/g, "");
+  const app = Object.keys(APP_SERVICE).sort((a, b) => b.length - a.length).find((k) => flat(c.name).startsWith(flat(k)));
+  return app ? APP_SERVICE[app] : "Workplace IT";
+}
+
+// Month 2 rule: one accountable owner and support group per CI class (OT owned by the site's OT lead)
+function ownerByRule(ci) {
+  if (ci.class === "server") return "Karin Sjöberg";
+  if (ci.class === "application") return "Johan Ek";
+  if (ci.class === "network") return "Lars Dahl";
+  return ci.site === "Factory A" ? "Oskar Viklund" : "Ida Forsman";
+}
+function supportGroupByRule(ci) {
+  if (ci.class === "server") return "Infrastructure Ops";
+  if (ci.class === "application") return "Application Support";
+  if (ci.class === "network") return "Network Ops";
+  return "OT Support " + SITE_CODE[ci.site];
+}
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function addDays(iso, days) {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + Math.round(days));
+  return d.toISOString().slice(0, 10);
+}
+function daysBetween(a, b) {
+  return Math.round((new Date(b + "T00:00:00Z") - new Date(a + "T00:00:00Z")) / 86400000);
+}
+function hash(str) {
+  let h = 0;
+  for (const ch of str) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h;
+}
+
+function generateBaseline() {
+  const rand = mulberry32(20260131);
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+  const between = (lo, hi) => lo + rand() * (hi - lo);
+  // Weighted sampling without replacement (Efraimidis–Spirakis): exact count, biased toward heavy weights
+  const sample = (items, n, w) => items
+    .map((it) => ({ it, k: Math.pow(rand(), 1 / Math.max(w(it), 1e-9)) }))
+    .sort((a, b) => b.k - a.k).slice(0, n).map((x) => x.it);
+
+  const layout = {
+    server: { "Data Center": 50, "HQ": 12, "Factory A": 8, "Factory B": 8, "Sales Hub": 7 },
+    application: { "Data Center": 40, "HQ": 20, "Sales Hub": 10, "Factory A": 3, "Factory B": 2 },
+    network: { "Factory A": 12, "Factory B": 12, "Data Center": 12, "HQ": 8, "Sales Hub": 6 },
+    "OT system": { "Factory A": 22, "Factory B": 28 },
+  };
+  const APPS = ["SAP ERP", "MES Line Control", "Payroll", "CRM", "Warehouse Mgmt", "Quality Mgmt", "PLM", "Intranet",
+    "Expense Claims", "BI Reporting", "Toolroom Scheduler", "E-commerce Portal", "Service Desk", "Document Archive",
+    "EDI Gateway", "Maintenance Planner", "Price Configurator", "Time Reporting", "Supplier Portal", "HR Self-Service",
+    "Fleet Tracker", "Label Printing", "Lab Information", "Energy Monitor", "Training Portal"];
+  const ENVS = ["Production", "Test", "QA"];
+  const NET = [{ t: "SW", word: "switch" }, { t: "FW", word: "firewall" }, { t: "RTR", word: "router" }, { t: "AP", word: "access point" }];
+  const OT = [{ c: "PLC", d: "Press line PLC" }, { c: "CNC", d: "CNC grinder" }, { c: "SCADA", d: "Heat treatment SCADA" },
+    { c: "RBT", d: "Robot cell" }, { c: "VIS", d: "Vision QC camera" }, { c: "HMI", d: "Assembly HMI" },
+    { c: "AGV", d: "AGV controller" }, { c: "FRN", d: "Furnace controller" }];
+
+  const counters = {};
+  const next = (k) => (counters[k] = (counters[k] || 0) + 1);
+  const pad = (n) => String(n).padStart(2, "0");
+  let appIdx = 0;
+
+  // Each CI gets a canonical name (discovery style) and two variants used by the spreadsheets
+  function makeNames(cls, site) {
+    const code = SITE_CODE[site], lc = code.toLowerCase();
+    if (cls === "server") {
+      const n = next("srv" + code);
+      return { canon: `${code}-SRV-${pad(n)}`, v: [`${lc}srv${pad(n)}`, `${site} server ${n}`] };
+    }
+    if (cls === "network") {
+      const k = pick(NET), n = next(k.t + code);
+      return { canon: `${code}-${k.t}-${pad(n)}`, v: [`${lc}${k.t.toLowerCase()}${pad(n)}`, `${site} ${k.word} ${n}`] };
+    }
+    if (cls === "OT system") {
+      const k = pick(OT), n = next(k.c + code);
+      return { canon: `${code}-${k.c}-${pad(n)}`, v: [`${lc}${k.c.toLowerCase()}${pad(n)}`, `${k.d} ${n} (${SITE_SPELLINGS[site][0]})`] };
+    }
+    const i = appIdx++, base = APPS[i % APPS.length], env = ENVS[Math.floor(i / APPS.length)];
+    return { canon: env === "Production" ? base : `${base} ${env}`, v: [`${base.toUpperCase().replace(/\W+/g, "_")}_${env.slice(0, 4).toUpperCase()}`], env, appBase: base };
+  }
+
+  // 260 real CIs
+  const primaries = [];
+  for (const cls of CLASSES) for (const [site, count] of Object.entries(layout[cls])) for (let i = 0; i < count; i++) {
+    const nm = makeNames(cls, site);
+    let source = SRC.NET;
+    if (cls === "OT system") source = rand() < 0.85 ? SRC.OT : SRC.SHEET;
+    else if (cls === "application") source = rand() < 0.85 ? SRC.NET : SRC.SHEET;
+    else source = rand() < 0.9 ? SRC.NET : SRC.SHEET;
+    const environment = cls === "application" ? nm.env
+      : cls === "server" ? (rand() < 0.85 ? "Production" : rand() < 0.65 ? "Test" : "Development") : "Production";
+    primaries.push({
+      id: "", name: source === SRC.SHEET ? pick(nm.v) : nm.canon, class: cls, site,
+      siteRaw: source === SRC.NET ? site : (rand() < 0.6 ? pick(SITE_SPELLINGS[site]) : site),
+      installStatus: "Installed", operationalStatus: "Operational", discoverySource: source, lastDiscovered: "",
+      owner: "", supportGroup: "", environment: source === SRC.SHEET && rand() < 0.25 ? "" : environment,
+      relationships: [], endOfSupport: "", replacementPlan: "no",
+      serialNumber: cls === "application" ? "" : "SN" + Math.floor(between(10000000, 99999999)),
+      // simulation-only fields (not shown in the list view)
+      alive: true, duplicateOf: "", _names: nm,
+    });
+  }
+  for (let i = primaries.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [primaries[i], primaries[j]] = [primaries[j], primaries[i]]; }
+  primaries.forEach((c, i) => (c.id = "CI" + String(1001 + i)));
+
+  // Lifecycle on the real CIs
+  const pastNoPlan = sample(primaries, 37, (c) => ({ "OT system": 3, network: 2.5, server: 2, application: 1 })[c.class]);
+  pastNoPlan.forEach((c) => (c.endOfSupport = addDays(BASE_REF, -between(20, 1200))));
+  let rest = primaries.filter((c) => !c.endOfSupport);
+  sample(rest, 8, () => 1).forEach((c) => (c.endOfSupport = addDays(BASE_REF, between(8, 145))));      // crosses EOS Feb–Jun
+  rest = primaries.filter((c) => !c.endOfSupport);
+  sample(rest, 14, () => 1).forEach((c) => { c.endOfSupport = addDays(BASE_REF, -between(20, 700)); c.replacementPlan = "yes"; });
+  primaries.filter((c) => !c.endOfSupport).forEach((c) => {
+    c.endOfSupport = addDays(BASE_REF, between(200, 2000));
+    c.replacementPlan = rand() < 0.25 ? "yes" : "no";
+  });
+
+  // 40 duplicates: a spreadsheet copy of a discovered asset, different name, same serial number
+  const hw = primaries.filter((c) => c.class !== "application" && c.discoverySource !== SRC.SHEET);
+  const dupSources = sample(hw, 40, (c) => ({ server: 3, network: 2, "OT system": 1.5 })[c.class]);
+  // two copies were typed in without a serial number – only the name gives them away
+  const noSerial = new Set(sample(dupSources.filter((c) => c.class === "server"), 2, () => 1));
+  const dups = dupSources.map((p, i) => ({
+    ...p, id: "CI" + String(1261 + i), _names: p._names,
+    name: noSerial.has(p) ? p._names.v[1] : pick(p._names.v),
+    siteRaw: rand() < 0.6 ? pick(SITE_SPELLINGS[p.site]) : p.site,
+    discoverySource: SRC.SHEET, serialNumber: noSerial.has(p) ? "" : p.serialNumber,
+    environment: rand() < 0.3 ? "" : p.environment, relationships: [], duplicateOf: p.id,
+  }));
+  const all = primaries.concat(dups);
+
+  // Ownership gaps: 102 of 300 (34%), concentrated on OT at Factory B
+  const noOwner = new Set(sample(all, 102, (c) => {
+    let w = ({ server: 1.2, application: 1, network: 2, "OT system": c.site === "Factory B" ? 6 : 3 })[c.class];
+    if (c.duplicateOf) w *= 3;
+    if (c.site === "Sales Hub") w *= 1.3;
+    return w;
+  }));
+  all.forEach((c) => {
+    c.owner = noOwner.has(c) ? "" : pick(PEOPLE);
+    const blankGroup = noOwner.has(c) ? rand() < 0.8 : rand() < 0.04;
+    c.supportGroup = blankGroup ? "" : supportGroupByRule(c);
+  });
+
+  // Relationships, CSDM-style: network gear is connected to servers and OT devices, servers host
+  // applications (and OT software), applications and OT systems support business services.
+  // Spreadsheet records and most of the OT import were never mapped, so they have no relationships.
+  const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const otOrphans = new Set(sample(primaries.filter((c) => c.class === "OT system"), 25, (c) => (c.site === "Factory B" ? 2 : 1)));
+  const mapped = primaries.filter((c) => (c.class === "OT system" ? !otOrphans.has(c) : c.discoverySource !== SRC.SHEET));
+  const noService = new Set(sample(mapped.filter((c) => c.class === "application"), 8, (c) => (c.environment === "Production" ? 1 : 3)));
+  const infraOnly = new Set(sample(mapped.filter((c) => c.class === "server"), 4, () => 1));   // backup/file servers, host no app
+  for (const c of mapped) {
+    if (c.class === "application" && !noService.has(c)) c.relationships.push({ type: "Supports", service: appService(c) });
+    if (c.class === "OT system") c.relationships.push({ type: "Supports", service: "Production – " + c.site });
+  }
+  for (const site of SITES) {
+    const here = (cls) => mapped.filter((c) => c.site === site && c.class === cls);
+    const servers = here("server").filter((c) => !infraOnly.has(c));
+    const hosted = shuffle(here("application").concat(here("OT system").filter(isHostedOt)));
+    if (servers.length && hosted.length) {
+      hosted.forEach((h, i) => servers[i % servers.length].relationships.push({ type: "Hosts", to: h.id }));
+      servers.filter((x) => !x.relationships.length).forEach((x) => x.relationships.push({ type: "Hosts", to: pick(hosted).id }));
+    }
+    const net = here("network"), targets = here("server").concat(here("OT system"));
+    for (const n of net) for (const t of sample(targets, 1 + Math.floor(rand() * 2), () => 1)) n.relationships.push({ type: "Connected to", to: t.id });
+    const reached = new Set(net.flatMap((n) => n.relationships.map((r) => r.to)));
+    if (net.length) for (const t of targets) if (!reached.has(t.id)) pick(net).relationships.push({ type: "Connected to", to: t.id });
+  }
+
+  // Discovery dates: OT list imported once in September, spreadsheets are older still
+  for (const c of all) {
+    if (c.discoverySource === SRC.OT) c.lastDiscovered = addDays("2025-09-15", -Math.floor(between(0, 4)));
+    else if (c.discoverySource === SRC.SHEET) c.lastDiscovered = addDays(BASE_REF, -between(120, 650));
+  }
+  // Assets that no longer exist: discovery stopped seeing them, but most still say "Installed"
+  const dupPrimaryIds = new Set(dups.map((d) => d.duplicateOf));
+  const gone = sample(primaries.filter((c) => c.discoverySource === SRC.NET && !dupPrimaryIds.has(c.id)), 14, (c) => (c.owner ? 1 : 6))
+    .concat(sample(primaries.filter((c) => c.discoverySource === SRC.SHEET), 4, () => 1));
+  for (const c of gone) {
+    c.alive = false;
+    if (c.discoverySource === SRC.NET) c.lastDiscovered = addDays(BASE_REF, -between(95, 420));
+    if (rand() < 0.4) c.installStatus = pick(["Absent", "In maintenance"]);
+    if (rand() < 0.5) c.operationalStatus = "Non-operational";
+  }
+  for (const c of all) if (c.alive && rand() < 0.03) { c.installStatus = "In maintenance"; c.operationalStatus = "Non-operational"; }
+
+  all.forEach((c) => delete c._names);
+  return all;
+}
+
+/* ---------- Rules used by the improvements and by the metrics ---------- */
+const isActive = (c) => c.installStatus !== "Retired";
+const SOURCE_RANK = { [SRC.NET]: 0, [SRC.OTD]: 0, [SRC.OT]: 1, [SRC.SHEET]: 2 };
+const byPreference = (a, b) => SOURCE_RANK[a.discoverySource] - SOURCE_RANK[b.discoverySource] || a.id.localeCompare(b.id);
+
+// Normalised name: "FB-SRV-07", "fbsrv07" and "Factory B server 7" all become "fbsrv7"
+function nameKey(c) {
+  let s = c.name.toLowerCase();
+  for (const site of SITES) for (const sp of [site, ...SITE_SPELLINGS[site]]) s = s.split(sp.toLowerCase()).join(SITE_CODE[site].toLowerCase());
+  s = s.replace(/server/g, "srv").replace(/switch/g, "sw").replace(/firewall/g, "fw").replace(/router/g, "rtr").replace(/access point/g, "ap");
+  s = s.replace(/[^a-z0-9]/g, "").replace(/(\D)0+(?=\d)/g, "$1");
+  return c.class + "|" + s;
+}
+
+// Duplicate detection used by the metric: a record is a duplicate when a preferred record
+// (discovered before spreadsheet, then lowest ID) already has the same serial number or normalised name
+function findDuplicates(cis) {
+  const serials = new Map(), names = new Map(), dupOf = new Map();
+  for (const c of cis.filter(isActive).sort(byPreference)) {
+    const k = nameKey(c);
+    const master = (c.serialNumber && serials.get(c.serialNumber)) || names.get(k);
+    if (master) { dupOf.set(c, master); continue; }
+    if (c.serialNumber) serials.set(c.serialNumber, c);
+    names.set(k, c);
+  }
+  return dupOf;
+}
+
+// CIs with a path up the CSDM chain to a business service: apps and OT systems that support one,
+// servers hosting such an app or OT system, and network gear connected to any of those
+function serviceReach(cis) {
+  const active = cis.filter(isActive);
+  const linked = new Set();
+  for (const c of active) if (c.relationships.some((r) => r.service)) linked.add(c.id);
+  for (const c of active) if (c.class === "server" && c.relationships.some((r) => r.type === "Hosts" && linked.has(r.to))) linked.add(c.id);
+  for (const c of active) if (c.class === "network" && c.relationships.some((r) => r.type === "Connected to" && linked.has(r.to))) linked.add(c.id);
+  return linked;
+}
+// Relationships per CI in both directions, counting only links between active CIs
+function relationshipCounts(cis) {
+  const active = new Set(cis.filter(isActive).map((c) => c.id));
+  const n = new Map(cis.map((c) => [c.id, 0]));
+  for (const c of cis) if (active.has(c.id)) for (const r of c.relationships) {
+    if (r.service) n.set(c.id, n.get(c.id) + 1);
+    else if (active.has(r.to)) { n.set(c.id, n.get(c.id) + 1); n.set(r.to, n.get(r.to) + 1); }
+  }
+  return n;
+}
+// Adds the one relationship that puts a CI into the service chain, preferring partners at the same site
+function connectUp(c, cis, reach) {
+  if (c.class === "application") { c.relationships.push({ type: "Supports", service: appService(c) }); return true; }
+  if (c.class === "OT system") { c.relationships.push({ type: "Supports", service: "Production – " + c.site }); return true; }
+  const fits = c.class === "server" ? (x) => x.class === "application" || isHostedOt(x) : (x) => x.class === "server" || x.class === "OT system";
+  const peers = cis.filter((x) => isActive(x) && reach.has(x.id) && fits(x));
+  const local = peers.filter((x) => x.site === c.site);
+  const pool = local.length ? local : peers;
+  if (!pool.length) return false;
+  c.relationships.push({ type: c.class === "server" ? "Hosts" : "Connected to", to: pool[hash(c.id) % pool.length].id });
+  return true;
+}
+const isFresh = (c, ref) => daysBetween(c.lastDiscovered, ref) <= 90;
+
+// Discovery runs every month: anything it can reach and that still exists gets a fresh date
+function runDiscovery(cis, ref) {
+  for (const c of cis) if (isActive(c) && c.alive && (c.discoverySource === SRC.NET || c.discoverySource === SRC.OTD)) {
+    c.lastDiscovered = addDays(ref, -(hash(c.id) % 10));
+  }
+}
+
+// New devices keep appearing: from Month 2 discovery finds a few each month. The class rule (live from
+// Month 2) gives them an owner, but nobody links them to a business service until a review does.
+const NEW_CIS_PER_MONTH = 3;
+function discoverNewCis(cis, m) {
+  if (m.n < 2) return;
+  const rand = mulberry32(7000 + m.n);
+  for (let i = 0; i < NEW_CIS_PER_MONTH; i++) {
+    const cls = rand() < 0.6 ? "server" : "network";
+    const site = SITES[Math.floor(rand() * SITES.length)];
+    const net = cis.filter((c) => isActive(c) && c.class === "network" && c.site === site);
+    const srv = cis.filter((c) => isActive(c) && c.class === "server" && c.site === site);
+    const ci = {
+      id: "CI" + (1001 + cis.length), name: `${SITE_CODE[site]}-${cls === "server" ? "SRV" : "SW"}-${50 + m.n * 10 + i}`, class: cls, site, siteRaw: site,
+      installStatus: "Installed", operationalStatus: "Operational", discoverySource: SRC.NET, lastDiscovered: addDays(m.ref, -Math.floor(rand() * 10)),
+      owner: "", supportGroup: "", environment: "Production",
+      relationships: [],
+      endOfSupport: addDays(m.ref, 1500 + rand() * 1000), replacementPlan: "no", serialNumber: "SN" + Math.floor(10000000 + rand() * 89999999),
+      alive: true, duplicateOf: "",
+    };
+    ci.owner = ownerByRule(ci);
+    ci.supportGroup = supportGroupByRule(ci);
+    if (cls === "server" && net.length) net[Math.floor(rand() * net.length)].relationships.push({ type: "Connected to", to: ci.id });
+    if (cls === "network" && srv.length) ci.relationships.push({ type: "Connected to", to: srv[Math.floor(rand() * srv.length)].id });
+    cis.push(ci);
+  }
+}
+
+// Churn the rules don't catch on their own: each month one server quietly dies (discovery stops
+// seeing it), and from Month 3 a factory re-uploads an OT device from its spreadsheet without a serial number
+function monthlyChurn(cis, m) {
+  if (m.n < 2) return;
+  const rand = mulberry32(9000 + m.n);
+  const live = cis.filter((c) => isActive(c) && c.alive && c.class === "server" && c.discoverySource === SRC.NET);
+  live[Math.floor(rand() * live.length)].alive = false;
+  if (m.n < 3) return;
+  const ot = cis.filter((c) => isActive(c) && c.class === "OT system" && /^F[AB]-/.test(c.name));
+  const src = ot[Math.floor(rand() * ot.length)];
+  cis.push({
+    ...src, id: "CI" + (1001 + cis.length), name: src.name.toLowerCase().replace(/-/g, ""), siteRaw: SITE_SPELLINGS[src.site][0],
+    discoverySource: SRC.SHEET, lastDiscovered: addDays(m.ref, -5), serialNumber: "", owner: "", supportGroup: "",
+    relationships: [], duplicateOf: src.id,
+  });
+}
+
+function mergeInto(master, dup) {
+  if (!master.owner && dup.owner) master.owner = dup.owner;
+  if (!master.supportGroup && dup.supportGroup) master.supportGroup = dup.supportGroup;
+  if (dup.replacementPlan === "yes") master.replacementPlan = "yes";
+  dup.installStatus = "Retired";
+  dup.mergedInto = master.id;
+}
+// Each improvement is a real transformation of the CI records. Returns what it changed.
+const IMPROVEMENTS = {
+  2(cis, ref) {
+    let assigned = 0, skipped = 0;
+    for (const c of cis) if (isActive(c) && (!c.owner || !c.supportGroup)) {
+      if (daysBetween(c.lastDiscovered, ref) > OWNER_RULE_MAX_AGE) { if (!c.owner) skipped++; continue; }
+      if (!c.owner) { c.owner = ownerByRule(c); assigned++; }
+      if (!c.supportGroup) c.supportGroup = supportGroupByRule(c);
+    }
+    return { assigned, skipped };
+  },
+  3(cis, ref) {
+    let merged = 0, retired = 0;
+    const serials = new Map();
+    for (const c of cis.filter(isActive).sort(byPreference)) {
+      if (!c.serialNumber) continue;
+      const master = serials.get(c.serialNumber);
+      if (master) { mergeInto(master, c); merged++; } else serials.set(c.serialNumber, c);
+    }
+    for (const c of cis) if (isActive(c) && c.discoverySource === SRC.NET && daysBetween(c.lastDiscovered, ref) > 240) {
+      c.installStatus = "Retired"; retired++;
+    }
+    for (const c of cis) c.siteRaw = c.site;
+    return { merged, retired };
+  },
+  4(cis, ref) {
+    let verified = 0, notFound = 0, pastPlanned = 0, soonPlanned = 0;
+    const horizon = addDays(ref, 183);
+    for (const c of cis) if (isActive(c) && c.site !== "Sales Hub") {
+      if (!isFresh(c, ref)) {
+        if (c.alive) { c.lastDiscovered = ref; verified++; } else { c.installStatus = "Retired"; notFound++; continue; }
+      }
+      if (c.replacementPlan === "no" && c.endOfSupport < horizon) {
+        c.replacementPlan = "yes";
+        if (c.endOfSupport < ref) pastPlanned++; else soonPlanned++;
+      }
+    }
+    return { verified, notFound, pastPlanned, soonPlanned };
+  },
+  5(cis) {
+    let ot = 0, plant = 0;
+    for (const c of cis) if (isActive(c) && c.class === "OT system") {
+      c.discoverySource = SRC.OTD;
+      if (c.relationships.some((r) => r.service)) continue;
+      connectUp(c, cis);
+      ot++;
+      const net = cis.filter((x) => isActive(x) && x.class === "network" && x.site === c.site);
+      if (net.length && !net.some((x) => x.relationships.some((r) => r.to === c.id))) net[hash(c.id) % net.length].relationships.push({ type: "Connected to", to: c.id });
+    }
+    // then plant equipment and everything imported from spreadsheets, layer by layer up the chain
+    const inScope = (c) => isFactory(c) || c.discoverySource === SRC.SHEET;
+    for (const cls of ["application", "server", "network"]) {
+      const reach = serviceReach(cis);
+      for (const c of cis) if (isActive(c) && inScope(c) && c.class === cls && !reach.has(c.id) && connectUp(c, cis, reach)) plant++;
+    }
+    return { ot, plant };
+  },
+  6(cis, ref) {
+    // Owners who attend the first review (about half) close the gaps on their own CIs
+    const attended = (c) => hash(c.id) % 2 === 0;
+    let owners = 0, links = 0, plans = 0, dups = 0, verified = 0, notFound = 0;
+    for (const [dup, master] of findDuplicates(cis)) if (attended(dup)) { mergeInto(master, dup); dups++; }
+    const horizon = addDays(ref, 183);
+    for (const c of cis) if (isActive(c) && attended(c)) {
+      if (!isFresh(c, ref)) {
+        if (c.alive) { c.lastDiscovered = ref; verified++; } else { c.installStatus = "Retired"; notFound++; continue; }
+      }
+      if (!c.owner) { c.owner = ownerByRule(c); owners++; }
+      if (!c.supportGroup) c.supportGroup = supportGroupByRule(c);
+      if (c.replacementPlan === "no" && c.endOfSupport < horizon) { c.replacementPlan = "yes"; plans++; }
+    }
+    for (const cls of ["application", "OT system", "server", "network"]) {
+      const reach = serviceReach(cis);
+      for (const c of cis) if (isActive(c) && attended(c) && c.class === cls && c.environment === "Production" && !reach.has(c.id) && connectUp(c, cis, reach)) links++;
+    }
+    return { owners, links, plans, dups, verified, notFound };
+  },
+};
+
+function computeKpis(cis, ref) {
+  const a = cis.filter(isActive);
+  const ot = a.filter((c) => c.class === "OT system");
+  const pct = (arr, f) => (arr.length ? (100 * arr.filter(f).length) / arr.length : 0);
+  const reach = serviceReach(cis);
+  const hasService = (c) => reach.has(c.id);
+  return {
+    n: a.length,
+    owner: pct(a, (c) => c.owner),
+    linked: pct(a, hasService),
+    dups: findDuplicates(cis).size,
+    fresh: pct(a, (c) => isFresh(c, ref)),
+    eos: a.filter((c) => c.endOfSupport < ref && c.replacementPlan === "no").length,
+    otOwner: pct(ot, (c) => c.owner),
+    otLinked: pct(ot, hasService),
+  };
+}
+
+// Build all six monthly snapshots: month m = month m-1 + discovery run + improvement m
+function buildStory() {
+  let cis = generateBaseline();
+  const snaps = [];
+  for (const m of MONTHS) {
+    cis = cis.map((c) => ({ ...c, relationships: c.relationships.map((r) => ({ ...r })) }));
+    runDiscovery(cis, m.ref);
+    discoverNewCis(cis, m);
+    monthlyChurn(cis, m);
+    const stats = IMPROVEMENTS[m.n] ? IMPROVEMENTS[m.n](cis, m.ref) : {};
+    snaps.push({ month: m, cis, stats, kpi: computeKpis(cis, m.ref) });
+  }
+  return snaps;
+}
+</script>
+
+<script>
+/* ---------- View ---------- */
+
+const STORY = buildStory();
+const FIRST = STORY[0], LAST = STORY[STORY.length - 1];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// The five metrics, their targets and the plan to reach them
+const METRICS = [
+  { key: "owner", label: "% CIs with an owner", unit: "%", hib: true, target: 95, by: 3, range: [50, 100],
+    role: "CMDB process owner", action: "Owner and support group rule per CI class" },
+  { key: "linked", label: "% CIs linked to a business service", unit: "%", hib: true, target: 90, by: 5, range: [50, 100],
+    role: "OT lead + service owners", action: "Map OT, plant and imported CIs to business services (CSDM)" },
+  { key: "dups", label: "Duplicate CIs", unit: "", hib: false, target: 5, by: 3, range: [0, 50],
+    role: "Configuration manager", action: "Identification rule on serial number; retire dead records" },
+];
+const M_BY_KEY = Object.fromEntries(METRICS.map((d) => [d.key, d]));
+const meets = (d, v) => (d.hib ? v >= d.target : v <= d.target);
+function status(key, v) {
+  const d = M_BY_KEY[key];
+  if (meets(d, v)) return "good";
+  return (d.hib ? v >= d.target - 10 : v <= 15) ? "warn" : "bad";
+}
+const STATUS_WORD = { good: "On target", warn: "Close", bad: "Off target" };
+const fmt = (key, v) => (M_BY_KEY[key].unit === "%" ? Math.round(v) + "%" : String(Math.round(v)));
+const targetText = (d) => `${d.hib ? "≥" : "≤"} ${d.target}${d.unit}`;
+
+const INITIATIVES = [
+  { name: "Data center consolidation",
+    why: "Know exactly what runs in the data center, and who to ask, before moving or switching anything off.",
+    deps: [{ key: "dups", label: "Duplicate CIs", op: "<=", t: 5 }, { key: "owner", label: "CIs with owner", op: ">=", t: 95, unit: "%" }] },
+  { name: "Cloud migration",
+    why: "Move applications together with everything they depend on, from an inventory without duplicates.",
+    deps: [{ key: "dups", label: "Duplicate CIs", op: "<=", t: 5 }, { key: "linked", label: "CIs linked to a service", op: ">=", t: 90, unit: "%" }] },
+  { name: "AI predictive maintenance",
+    why: "Machine data is only useful when each OT system has an owner and is tied to the production service it supports.",
+    deps: [{ key: "otLinked", label: "OT systems linked to a service", op: ">=", t: 90, unit: "%" }, { key: "otOwner", label: "OT systems with owner", op: ">=", t: 85, unit: "%" }] },
+];
+const depPasses = (d, k) => (d.op === ">=" ? k[d.key] >= d.t : k[d.key] <= d.t);
+const firstPass = (pred) => STORY.find((s) => pred(s.kpi));
+
+const css = getComputedStyle(document.documentElement);
+const COLOR = { good: css.getPropertyValue("--good").trim(), warn: css.getPropertyValue("--warn").trim(), bad: css.getPropertyValue("--bad").trim() };
+const LINE = "#34557a";
+if (window.Chart) Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+/* ================= Step navigation ================= */
+const STEP_NAMES = ["Raw data", "Analysis", "Improvement plan", "Outcome"];
+let step = 1;
+
+$("steps").innerHTML = STEP_NAMES.map((n, i) =>
+  (i ? `<span class="sep"></span>` : "") + `<button type="button" class="step-btn" data-s="${i + 1}"><span class="num">${i + 1}</span>${n}</button>`).join("");
+$("steps").addEventListener("click", (e) => {
+  const b = e.target.closest(".step-btn");
+  if (b) setStep(+b.dataset.s);
+});
+$("back").addEventListener("click", () => setStep(step - 1));
+$("next").addEventListener("click", () => setStep(step + 1));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeDetail();
+  if (e.target.matches("input, select, textarea") || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === "ArrowRight") { setStep(step + 1); e.preventDefault(); }
+  if (e.key === "ArrowLeft") { setStep(step - 1); e.preventDefault(); }
+});
+
+function setStep(n) {
+  n = Math.max(1, Math.min(4, n));
+  if (n !== step) closeDetail();
+  step = n;
+  document.querySelectorAll(".step").forEach((el) => el.classList.toggle("active", +el.dataset.step === n));
+  document.querySelectorAll(".step-btn").forEach((b) => {
+    b.classList.toggle("on", +b.dataset.s === n);
+    b.classList.toggle("done", +b.dataset.s < n);
+  });
+  $("back").disabled = n === 1;
+  $("next").disabled = n === 4;
+  $("next").textContent = n < 4 ? `Next: ${STEP_NAMES[n]} →` : "Next →";
+  if (n === 1) sizeFilterRow();
+  animateBars(n);
+}
+
+/* ================= Step 1 – Raw data (plain list view, no analysis) ================= */
+const REL_COUNT = relationshipCounts(FIRST.cis);
+const RAW = FIRST.cis.map((c) => ({ ...c, className: CLASS_NAME[c.class], relCount: REL_COUNT.get(c.id) }));
+const BY_ID = new Map(FIRST.cis.map((c) => [c.id, c]));
+const incoming = (c) => FIRST.cis.filter(isActive).flatMap((x) => x.relationships.filter((r) => r.to === c.id).map((r) => ({ from: x, type: r.type })));
+const VERB = { Hosts: "hosts", "Connected to": "connected to" };
+// Every path from a CI up the CSDM layers to a business service
+function upPaths(c, seen = new Set()) {
+  if (seen.has(c.id)) return [];
+  const next = new Set(seen).add(c.id), out = [];
+  for (const r of c.relationships) {
+    if (r.service) { out.push([{ verb: "supports", name: r.service, svc: true }]); continue; }
+    const t = BY_ID.get(r.to);
+    if (t && isActive(t)) for (const p of upPaths(t, next)) out.push([{ verb: VERB[r.type], name: t.name }, ...p]);
+  }
+  return out;
+}
+// Full chains through a CI: for applications and OT systems, start one layer down at the server or network gear
+function chainsThrough(c) {
+  const self = { name: c.name, self: true };
+  const up = upPaths(c);
+  const below = c.class === "application" || c.class === "OT system" ? incoming(c) : [];
+  if (!below.length) return up.map((p) => [self, ...p]);
+  return below.flatMap((b) => up.map((p) => [{ name: b.from.name }, { ...self, verb: VERB[b.type] }, ...p]));
+}
+const COLS = [
+  { k: "id", label: "CI ID" }, { k: "name", label: "Name", link: true }, { k: "className", label: "Class" }, { k: "siteRaw", label: "Site" },
+  { k: "installStatus", label: "Install status" }, { k: "operationalStatus", label: "Opera­tional status" },
+  { k: "discoverySource", label: "Discovery source" }, { k: "lastDiscovered", label: "Last discovered" },
+  { k: "owner", label: "Owned by" }, { k: "supportGroup", label: "Support group" }, { k: "environment", label: "Environment" },
+  { k: "relCount", label: "Rela­tions", num: true }, { k: "endOfSupport", label: "End of support" },
+];
+const listState = { sort: "id", dir: 1, filters: {}, selected: null };
+
+$("listHead").innerHTML = `<tr>${COLS.map((c) => `<th data-k="${c.k}">${c.label}<span class="arr"></span></th>`).join("")}</tr>
+  <tr class="filters">${COLS.map((c) => `<th><input data-k="${c.k}" placeholder="Filter" aria-label="Filter ${c.label}"></th>`).join("")}</tr>`;
+$("listHead").addEventListener("click", (e) => {
+  const th = e.target.closest("th[data-k]");
+  if (!th) return;
+  listState.dir = listState.sort === th.dataset.k ? -listState.dir : 1;
+  listState.sort = th.dataset.k;
+  renderList();
+});
+$("listHead").addEventListener("input", (e) => {
+  listState.filters[e.target.dataset.k] = e.target.value.trim().toLowerCase();
+  renderList();
+});
+function sizeFilterRow() {
+  const h = $("listHead").rows[0].getBoundingClientRect().height;
+  if (h) $("listHead").style.setProperty("--head-h", h + "px");
+}
+
+function renderList() {
+  const { sort, dir, filters } = listState;
+  const col = COLS.find((c) => c.k === sort);
+  let list = RAW.filter((r) => COLS.every((c) => {
+    const f = filters[c.k];
+    if (!f) return true;
+    return c.num ? String(r[c.k]) === f : String(r[c.k]).toLowerCase().includes(f);
+  }));
+  list.sort((a, b) => {
+    const x = a[sort], y = b[sort];
+    if (col.num) return (x - y) * dir;
+    if (x === "" && y !== "") return 1;           // blanks last
+    if (y === "" && x !== "") return -1;
+    return String(x).localeCompare(String(y)) * dir;
+  });
+  document.querySelectorAll("#listHead th[data-k] .arr").forEach((s) => (s.textContent = s.parentElement.dataset.k === sort ? (dir > 0 ? " ▲" : " ▼") : ""));
+  $("rowCount").textContent = list.length === RAW.length ? `${RAW.length} records` : `${list.length} of ${RAW.length} records`;
+  $("rows").innerHTML = list.map((r) => `<tr data-id="${r.id}" class="${r.id === listState.selected ? "sel" : ""}">${COLS.map((c) =>
+    `<td class="${c.num ? "num" : ""}${c.link ? " link" : ""}" title="${esc(r[c.k])}">${esc(r[c.k])}</td>`).join("")}</tr>`).join("");
+}
+$("rows").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-id]");
+  if (tr) openDetail(tr.dataset.id);
+});
+
+function openDetail(id) {
+  const r = RAW.find((x) => x.id === id);
+  listState.selected = id;
+  document.querySelectorAll("#rows tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.id === id));
+  $("dId").textContent = `${r.id} · ${r.className}`;
+  $("dName").textContent = r.name;
+  const field = (k, v) => `<dt>${k}</dt><dd>${v ? esc(v) : "&nbsp;"}</dd>`;
+  $("dBody").innerHTML = `<dl>
+      ${field("Site", r.siteRaw)}${field("Install status", r.installStatus)}${field("Operational status", r.operationalStatus)}
+      ${field("Discovery source", r.discoverySource)}${field("Last discovered", r.lastDiscovered)}${field("Serial number", r.serialNumber)}
+      ${field("Owned by", r.owner)}${field("Support group", r.supportGroup)}${field("Environment", r.environment)}
+      ${field("End of support", r.endOfSupport)}${field("Replacement plan", r.replacementPlan === "yes" ? "Yes" : "")}
+    </dl>
+    ${relationshipsHtml(BY_ID.get(r.id))}`;
+  $("detail").classList.add("open");
+}
+function relationshipsHtml(c) {
+  const direct = [
+    ...c.relationships.map((x) => (x.service ? ["Supports", x.service] : [x.type, BY_ID.get(x.to).name])),
+    ...incoming(c).map((i) => [i.type === "Hosts" ? "Runs on" : "Connected to", i.from.name]),
+  ];
+  if (!direct.length) return `<h4>Relationships</h4><div class="muted" style="font-size:14px">No relationships recorded</div>`;
+  const chains = chainsThrough(c);
+  const step = (s, i) => (i ? `<span class="v">→ ${s.verb}</span> ` : "") + `<span class="${s.self ? "self" : s.svc ? "svc" : ""}">${esc(s.name)}</span>`;
+  const shown = chains.slice(0, 5);
+  return `<h4>Service chain</h4>
+    ${shown.length ? `<ul class="chain">${shown.map((p) => `<li>${p.map(step).join(" ")}</li>`).join("")}</ul>` +
+      (chains.length > shown.length ? `<div class="muted more">+ ${chains.length - shown.length} more</div>` : "")
+      : `<div class="muted" style="font-size:14px;margin-bottom:14px">No path to a business service</div>`}
+    <h4>Relationships</h4>
+    <ul class="rels">${direct.map(([t, n]) => `<li>${t} → <b>${esc(n)}</b></li>`).join("")}</ul>`;
+}
+function closeDetail() {
+  $("detail").classList.remove("open");
+  listState.selected = null;
+  document.querySelectorAll("#rows tr.sel").forEach((tr) => tr.classList.remove("sel"));
+}
+$("dClose").addEventListener("click", closeDetail);
+renderList();
+
+/* ================= Step 2 – Analysis of the Month 1 records ================= */
+const REACH1 = serviceReach(FIRST.cis);
+(function renderAnalysis() {
+  const base = FIRST.cis.filter(isActive);
+  const dups = findDuplicates(FIRST.cis);
+  const notSeen = (c) => !isFresh(c, BASE_REF);
+  const pct = (n, d) => (d ? Math.round((100 * n) / d) : 0);
+  const level = (p) => (p >= 90 ? "" : p >= 75 ? "warn" : "bad");
+
+  // 1. How complete is each field?
+  const hardware = base.filter((c) => c.class !== "application");
+  const fields = [
+    ["Owned by", base, (c) => c.owner],
+    ["Support group", base, (c) => c.supportGroup],
+    ["Environment", base, (c) => c.environment],
+    ["Serial number (hardware)", hardware, (c) => c.serialNumber],
+    ["Any relationship", base, (c) => REL_COUNT.get(c.id)],
+    ["Linked to a business service", base, (c) => REACH1.has(c.id)],
+  ].map(([label, set, f]) => ({ label, p: pct(set.filter(f).length, set.length) }));
+  const weakest = [...fields].sort((a, b) => a.p - b.p).slice(0, 2);
+  $("take1").textContent = `Weakest: ${weakest[0].label} ${weakest[0].p}%, ${weakest[1].label.toLowerCase()} ${weakest[1].p}%.`;
+  $("completeness").innerHTML = fields.map((f) => `<div class="crow"><span>${f.label}</span>
+    <div class="track"><div class="fill ${level(f.p)}" data-w="${f.p}"></div></div><b>${f.p}%</b></div>`).join("");
+
+  // 2. Group by site and class (site spellings normalised first)
+  const cells = {};
+  let max = null;
+  for (const site of SITES) for (const cls of CLASSES) {
+    const set = base.filter((c) => c.site === site && c.class === cls);
+    const x = { n: set.length, hit: set.filter((c) => !c.owner).length };
+    x.rate = x.n ? x.hit / x.n : 0;
+    cells[site + cls] = x;
+    if (x.n >= 5 && (!max || x.rate > max.rate)) max = { ...x, site, cls };
+  }
+  const spellings = new Set(base.map((c) => c.siteRaw)).size;
+  $("take2").textContent = `${CLASS_NAME[max.cls]}s at ${max.site} stand out: ${Math.round(max.rate * 100)}% unowned.`;
+  $("note2").textContent = `${spellings} site spellings normalised to ${SITES.length} sites`;
+  $("pivot").innerHTML = `<thead><tr><th></th>${CLASSES.map((c) => `<th>${CLASS_NAME[c]}</th>`).join("")}</tr></thead><tbody>` +
+    SITES.map((site) => `<tr><th>${site}</th>${CLASSES.map((cls) => {
+      const x = cells[site + cls];
+      if (!x.n) return `<td class="empty">–</td>`;
+      const isMax = site === max.site && cls === max.cls;
+      return `<td class="${x.rate > 0.5 ? "hot" : ""}${isMax ? " max" : ""}" style="--a:${(x.rate * 0.9).toFixed(2)}" title="${x.hit} of ${x.n} unowned">${Math.round(x.rate * 100)}%</td>`;
+    }).join("")}</tr>`).join("") + `</tbody>`;
+
+  // 3. Duplicates, freshness, relationships and end of support, per class (highest in each column in red)
+  const eosGap = (c) => c.endOfSupport < BASE_REF && c.replacementPlan === "no";
+  const checks = [
+    ["Duplicates", (c) => dups.has(c)],
+    ["Stale", notSeen],
+    ["Orphans", (c) => !REL_COUNT.get(c.id)],
+    ["Past EOS", eosGap],
+  ];
+  const rows = CLASSES.map((cls) => {
+    const set = base.filter((c) => c.class === cls);
+    return { cls, n: set.length, v: checks.map(([, f]) => set.filter(f).length) };
+  });
+  const colMax = checks.map((_, j) => Math.max(...rows.map((r) => r.v[j])));
+  const total = (j) => rows.reduce((t, r) => t + r.v[j], 0);
+  $("take3").textContent = `${total(0)} duplicates · ${total(1)} stale · ${total(2)} orphans · ${total(3)} past support`;
+  $("byClass").innerHTML = `<thead><tr><th>Class</th><th>Records</th>${checks.map(([h]) => `<th>${h}</th>`).join("")}</tr></thead><tbody>` +
+    rows.map((r) => `<tr><td>${CLASS_NAME[r.cls]}</td><td>${r.n}</td>${r.v.map((x, j) => `<td class="${x === colMax[j] ? "hi" : ""}">${x}</td>`).join("")}</tr>`).join("") + `</tbody>`;
+})();
+
+/* ================= Step 3 – Improvement plan ================= */
+const GOALS = [...METRICS].sort((a, b) => a.by - b.by);
+$("planLead").textContent = `Lift ${GOALS.length} KPIs`;
+$("plan").innerHTML = GOALS.map((d) => {
+  const v = FIRST.kpi[d.key];
+  const max = d.unit === "%" ? 100 : 50;
+  return `<div class="prow">
+    <div class="pk"><div class="pl">${d.label}</div>
+      <div class="pv"><span class="from ${status(d.key, v)}">${fmt(d.key, v)}</span><span class="arrow">→</span><span class="to">${targetText(d)}</span></div></div>
+    <div class="pbar"><div class="track"><div class="fill ${status(d.key, v)}" data-w="${(100 * v) / max}"></div><div class="tgt" style="left:${(100 * d.target) / max}%"></div></div>
+    </div>
+    <div class="pa"><div class="act">${d.action}</div></div>
+    <div class="po"><span>Owner</span><b>${d.role}</b></div>
+  </div>`;
+}).join("");
+
+/* ================= Step 4 – Outcome ================= */
+function renderOutcome() {
+  const a = FIRST.kpi, b = LAST.kpi;
+  const metCount = METRICS.filter((d) => meets(d, b[d.key])).length;
+  const onTrack = INITIATIVES.filter((it) => it.deps.every((d) => depPasses(d, b))).length;
+  $("headline").textContent = `${metCount} of ${METRICS.length} targets met, ${onTrack} of ${INITIATIVES.length} initiatives on track`;
+  $("subline").textContent = `Before vs after the improvements · ${a.n} → ${b.n} active CIs after merging duplicates, retiring assets that no longer exist and adding newly discovered ones`;
+
+  $("compare").innerHTML = METRICS.map((d) => {
+    const from = a[d.key], to = b[d.key];
+    const diff = Math.round(to) - Math.round(from);
+    const met = meets(d, to);
+    return `<div class="ocard">
+      <div class="label">${d.label}</div>
+      <div class="change"><span class="from ${status(d.key, from)}">${fmt(d.key, from)}</span><span class="arrow">→</span><span class="to ${met ? "" : "bad"}">${fmt(d.key, to)}</span></div>
+      <div class="odelta">${diff > 0 ? "▲ +" : diff < 0 ? "▼ −" : "± "}${Math.abs(diff)}${d.unit ? " pp" : ""} · target ${targetText(d)}</div>
+      <span class="pill ${met ? "good" : "bad"}">${met ? "Target met" : "Target missed"}</span>
+    </div>`;
+  }).join("");
+
+  $("outInits").innerHTML = INITIATIVES.map((it) => {
+    const ok = it.deps.every((d) => depPasses(d, b));
+    const since = firstPass((k) => it.deps.every((d) => depPasses(d, k)));
+    // the metric(s) that passed last are the ones that unblocked the initiative
+    const unblockers = since ? it.deps.filter((d) => firstPass((k) => depPasses(d, k)).month.n === since.month.n) : [];
+    const depLabel = (d) => `${d.label} ${d.op === ">=" ? "≥" : "≤"} ${d.t}${d.unit || ""} (now ${Math.round(b[d.key])}${d.unit || ""})`;
+    return `<div class="init ${ok ? "good" : ""}">
+      <div class="top"><span class="name">${it.name}</span><span class="pill ${ok ? "good" : "warn"}">${ok ? "On track" : "At risk"}</span></div>
+      <div class="why">${it.why}</div>
+      ${since ? `<div class="unblock"><b>Unblocked by:</b> ${unblockers.map(depLabel).join(" and ")}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function animateBars(n) {
+  const fills = document.querySelectorAll(`.step[data-step="${n}"] .fill[data-w]`);
+  fills.forEach((f) => (f.style.width = "0"));
+  requestAnimationFrame(() => requestAnimationFrame(() => fills.forEach((f) => (f.style.width = f.dataset.w + "%"))));
+}
+
+/* ================= Start ================= */
+renderOutcome();
+// Optional deep link, e.g. index.html#step=2 or #step=1&ci=CI1004
+const hashStep = +(location.hash.match(/step=(\d)/) || [])[1];
+setStep(hashStep || 1);
+const hashCi = (location.hash.match(/ci=(CI\d+)/) || [])[1];
+if (hashCi && RAW.some((r) => r.id === hashCi)) openDetail(hashCi);
+</script>
+</body>
+
+</html>
